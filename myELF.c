@@ -112,53 +112,73 @@ void printSecNames(){
     }
 }
 
-void printSymbols(){
-    // int i, j sh_num, sym_offset, sym_num;
-    // Elf32_Shdr *sections;
-    // Elf32_Shdr *sectionNames;
-    // char *sectionsNamesStrings;
-    // Elf32_Symbol *symbols;
-    // Elf32_Shdr *symbolsNames;
-    
-    //     if (currentfd == -1){
-    //     fprintf(stderr,"%s\n", "no file is mapped");
-	//     exit(1);
-	// }   
-    // sections = (Elf32_Shdr *)(map_start + curr_header->e_shoff); /*file start adress + offset of shtable*/
-    // *sectionNames = sections + curr_header->e_shstrndx;   /*shtable address + offset of sections names table*/
-    // sectionsNamesStrings = map_start + sectionNames->sh_offset; /*fsections names table + offset of shtable*/
-    // sh_num = curr_header->e_shnum;
-    //     if (dFlag == 1){
-    //     /*TODO*/
-    // }
-    // for (i = 1; i < sh_num; i++) {
-    //     if (sections[i].sh_type == SHT_SYMTAB) {
-    //         symbols = (Elf32_Symbol *)(map_start + sections[i].sh_offset);
-    //         symbolsNames = (Elf32_Shdr *)(sections + sections[i].sh_link);
-    //         sym_num = (sections[i].sh_size)/sizeof(Elf32_Sym);
-    //         printf("[index]\tvalue\tsection_index\tsection_name\tsymbol_name\n");
-    //         for (j = 0, j < sym_num; j++) {
-    //             printf("[%2d]\t%21s\t%7x\t%7x\t%7x\t%10s\n", j, symbols[j].st_value, symbols[j].st_shndx,  ,symbolsNames + symbols[j].st_name
-    //             printf("[%d]\t\t%9d\t\t%d\t\t%s\t\t%s\n" , j , secsym[j].st_value , secsym[j].st_shndx , isValidIndex(secsym[j].st_shndx , section , names_pointer) , (char *)(map_start+secsym_names->sh_offset + secsym[j].st_name));
+char* getSectionName(int section_number, Elf32_Shdr *sections, char* sectionsNamesStrings) {
+    if (section_number < 1 || section_number > curr_header->e_shnum) return "ABS";
+    else return sectionsNamesStrings+sections[section_number].sh_name;
+}
 
-    //         }
-    //     }
+void printSymbols(){
+    int i, j, sh_num, sym_offset, sym_num;
+    Elf32_Shdr *sections;
+    Elf32_Shdr *sectionNames;
+    char *sectionsNamesStrings;
+    Elf32_Sym *symbols;
+    Elf32_Shdr *sym_names_table;
+    char *sym_names;
+    
+    if (currentfd == -1){
+        fprintf(stderr,"%s\n", "no file is mapped");
+	    exit(1);
+	}
+
+    sections = (Elf32_Shdr *)(map_start + curr_header->e_shoff);
+    sectionNames = sections + curr_header->e_shstrndx;   /*shtable address + offset of sections names table*/
+    sectionsNamesStrings = map_start + sectionNames->sh_offset; /*fsections names table + offset of shtable*/
+    sh_num = curr_header->e_shnum;
+        if (dFlag == 1){
+        /*TODO*/
+    }
+    for (i = 0; i < sh_num; i++) { //run through all sections
+        if (sections[i].sh_type == SHT_SYMTAB || sections[i].sh_type == SHT_DYNSYM) {    // in case curr entry is symbol table
+            symbols = (Elf32_Sym *)(map_start + sections[i].sh_offset); //define a new symbols table
+            //sym_names = (char*)(map_start + sections[sections[i].sh_link].sh_offset);
+            sym_names_table = (Elf32_Shdr *)(sections + sections[i].sh_link); // define its names table
+            sym_names = map_start + sym_names_table->sh_offset; // define the string of names linked to the names table
+            sym_num = (sections[i].sh_size)/sizeof(Elf32_Sym); //calc number of entries in symbols table
+            
+            printf("[index]\t\tvalue\t\tsection_index\tsection_name\t\tsymbol_name\n");
+            for (j = 0; j < sym_num; j++) {
+                printf("[%2d]\t\t%d\t\t%d\t\t%s\t\t%s\n", j, symbols[j].st_value, symbols[j].st_shndx, 
+                                                            getSectionName(symbols[j].st_shndx, sections, sectionsNamesStrings),
+                                                            (char*)(sym_names + symbols[j].st_name));
+
+            }
+            printf("\n");
+        }
+
+    }
 }
 
 void relocationTables(){
-    int i, j, sh_num, rel_offset, rel_num;
-    Elf32_Shdr *sections = (Elf32_Shdr *)(map_start + curr_header->e_shoff); /*file start adress + offset of shtable*/
+    int i, j, sh_num, rel_offset, rels_num;
+    Elf32_Shdr *sections = (Elf32_Shdr *)(map_start + curr_header->e_shoff);
     sh_num = curr_header->e_shnum;
     Elf32_Rel *rels;
-    int rels_num;
-    printf(" Offset \t  Info  \n");
+    Elf32_Sym *rel_linked_symTable;
+    Elf32_Shdr *symTable_names;
     for (i = 0; i < sh_num; i++) {
         if (sections[i].sh_type == 9){
-            rel_offset = sections[i].sh_offset;
+            rels = (Elf32_Rel *)(map_start + sections[i].sh_offset);
+            rel_linked_symTable = (Elf32_Sym*)((char*)map_start + sections[sections[i].sh_link].sh_offset);
+            symTable_names = sections + sections[sections[i].sh_link].sh_link;
             rels_num = sections[i].sh_size / sizeof(Elf32_Rel);
-            rels = (Elf32_Rel *)(map_start + rel_offset);
-            for (j = 0; j < rels_num; j++) {
-                printf("%8x\t%8x\n",rels[j].r_offset, rels[j].r_info);
+            char * names = map_start + symTable_names->sh_offset;
+            printf("Relocation section %s at offset %x contains %d entries:\n", names+sections[i].sh_name, sections[i].sh_offset, rels_num);
+            printf(" offset \t  info  \tType\tSym.Value\tSym.Name\n");
+            for (j = 0; j < rels_num; j++){
+                printf("%08x\t%08x\t%4d\t %0x\t%s\n", rels[j].r_offset , rels[j].r_info , ELF32_R_TYPE(rels[j].r_info), 
+                rel_linked_symTable[ELF32_R_SYM(rels[j].r_info)].st_value,
+                names + rel_linked_symTable[ELF32_R_SYM(rels[j].r_info)].st_name);
             }
         }
     }
