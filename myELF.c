@@ -72,7 +72,7 @@ void examine(){
     printf("Magic: \t\t\t\t %x %x %x\n",curr_header->e_ident[1],curr_header->e_ident[2], curr_header->e_ident[3]);
     printf("Data: \t\t\t\t ");
     switch (curr_header->e_ident[5]){
-        case 0: printf("invalid\n"); break; /*correct?*/
+        case 0: printf("invalid data encoding\n"); break;
         case 1: printf("2's complement, little endian\n"); break;
         case 2: printf("2's complement, big endian\n"); break;
     }
@@ -95,12 +95,18 @@ void printSecNames(){
 	    exit(1);
 	}
  
-    sections = (Elf32_Shdr *)(map_start + curr_header->e_shoff); /*file start adress + offset of shtable*/
-    sectionNames= sections + curr_header->e_shstrndx;   /*shtable address + offset of sections names table*/
-    sectionsNamesStrings = map_start + sectionNames->sh_offset; /*fsections names table + offset of shtable*/
+    sections = (Elf32_Shdr *)(map_start + curr_header->e_shoff); /*file start adress + offset of section headers table*/
+    sectionNames= sections + curr_header->e_shstrndx;   /*shtable address + offset of sections names table, 
+                                                        this is an entry in the section headers table 
+                                                        that contains the offset of the string table*/
+    sectionsNamesStrings = map_start + sectionNames->sh_offset; /*file start adress + offset of strings table
+                                                                    (which apears in sh_offset of the entry in 'section names'*/
     sh_num = curr_header->e_shnum;
     if (dFlag == 1){
-        /*TODO*/
+        fprintf(stderr,"start address: [%p] + sections header table offset: [%d] = sections header table address: [%p]\n",map_start, curr_header->e_shoff, sections);
+        fprintf(stderr,"sh_add: [%p] + names table offset: [%d] = section names entry: [%p]\n",sections,curr_header->e_shstrndx, sectionNames);
+        fprintf(stderr,"start address: [%p] + strign table offset: [%d] = sections names string table address: [%p]\n",map_start, sectionNames->sh_offset, sectionsNamesStrings);
+  
     }
     printf("[index]\tsection_name\tsection_address\tsection_offset\tsection_size\tsection_type\n");
     printf("[%2d]\t%21s\t%7x\t%7x\t%7x\t%10s\n" , 0 , "" , 0 , 0 , 0 ,stringOfType(0));
@@ -135,14 +141,16 @@ void printSymbols(){
     sectionNames = sections + curr_header->e_shstrndx;   /*shtable address + offset of sections names table*/
     sectionsNamesStrings = map_start + sectionNames->sh_offset; /*fsections names table + offset of shtable*/
     sh_num = curr_header->e_shnum;
-        if (dFlag == 1){
-        /*TODO*/
+    if (dFlag == 1){
+        fprintf(stderr,"start address: [%p] + sections header table offset: [%d] = sections header table address: [%p]\n",map_start, curr_header->e_shoff, sections);
+        fprintf(stderr,"sh_add: [%p] + names table offset: [%d] = section names entry: [%p]\n",sections,curr_header->e_shstrndx, sectionNames);
+        fprintf(stderr,"start address: [%p] + strign table offset: [%d] = sections names string table address: [%p]\n",map_start, sectionNames->sh_offset, sectionsNamesStrings);
+  
     }
     for (i = 0; i < sh_num; i++) { //run through all sections
         if (sections[i].sh_type == SHT_SYMTAB || sections[i].sh_type == SHT_DYNSYM) {    // in case curr entry is symbol table
-            symbols = (Elf32_Sym *)(map_start + sections[i].sh_offset); //define a new symbols table
-            //sym_names = (char*)(map_start + sections[sections[i].sh_link].sh_offset);
-            sym_names_table = (Elf32_Shdr *)(sections + sections[i].sh_link); // define its names table
+            symbols = (Elf32_Sym *)(map_start + sections[i].sh_offset); //define a new symbols table (add offset in curr entry)
+            sym_names_table = (Elf32_Shdr *)(sections + sections[i].sh_link); // define its names table (linked to curr entry)
             sym_names = map_start + sym_names_table->sh_offset; // define the string of names linked to the names table
             sym_num = (sections[i].sh_size)/sizeof(Elf32_Sym); //calc number of entries in symbols table
             
@@ -169,7 +177,7 @@ void relocationTables(){
     for (i = 0; i < sh_num; i++) {
         if (sections[i].sh_type == 9){
             rels = (Elf32_Rel *)(map_start + sections[i].sh_offset);
-            rel_linked_symTable = (Elf32_Sym*)((char*)map_start + sections[sections[i].sh_link].sh_offset);
+            rel_linked_symTable = (Elf32_Sym*)(map_start + sections[sections[i].sh_link].sh_offset);
             symTable_names = sections + sections[sections[i].sh_link].sh_link;
             rels_num = sections[i].sh_size / sizeof(Elf32_Rel);
             char * names = map_start + symTable_names->sh_offset;
